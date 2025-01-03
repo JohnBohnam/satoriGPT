@@ -1,0 +1,1 @@
+Write a c++ program that accepts an integer and checks if this integer is prime - print 1 if it is prime and 0 otherwise.

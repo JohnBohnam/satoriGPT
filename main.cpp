@@ -4,13 +4,15 @@
 #include <filesystem>
 #include <cstdlib>
 #include <set>
+#include "ollama.hpp"
 
 namespace fs = std::filesystem;
 
 std::string getUsersProblemDescription() {
-    std::cout<<"type in path of the problem description:\n";
-    std::string filePath;
-    std::getline(std::cin, filePath);
+    // std::cout<<"type in path of the problem description:\n";
+    // std::string filePath;
+    // std::getline(std::cin, filePath);
+    std::string filePath = "problem.txt";
 
     std::ifstream file(filePath);
     if (!file) {
@@ -29,42 +31,75 @@ std::string getUsersProblemDescription() {
 }
 
 enum TestResult {
-    Correct, Incorrect, CompilationFailed, RunFailed
+    Correct, Incorrect, RunFailed
 };
 
-// returns the address of the file with the solution
-std::string mockCreateCorrectSolution(std::string problemDescription) {
-    const std::string solutionPath = "./solution.cpp";
-    std::ofstream file(solutionPath);
-    file<<"int x;" << std::endl;
-    file<<"#include<bits/stdc++.h>" << std::endl;
-    file<<"using namespace std;" << std::endl;
-    file<<"int main() {" << std::endl;
-    file<<"cin>>x;" << std::endl;
-    file<<"cout<<x<<endl;" << std::endl;
-    file<<"}" << std::endl;
-    file.close();
-    return solutionPath;
-}
+enum CompilationResult {
+    CompilationSuccess, CompilationFailed
+};
+
+class Assistant {
+
+    std::string model;
+    ollama::response context;
+    std::ofstream solutionFile;
+
+    std::function<void(const ollama::response&)> printPartialResponse = [this](const ollama::response &response ) {
+        std::cout<<response.as_simple_string();
+        fflush(stdout);
+        solutionFile << response.as_simple_string();
+    };
+
+public:
+    std::string solution_path;
+
+    Assistant(std::string solution_path = "solution.cpp",
+              std::string model = "codellama") : solution_path(solution_path), model(model) {
+        // solutionFile.open(solution_path);
+    }
+
+    void prompt(std::string prompt) {
+        solutionFile.open(solution_path);
+        ollama::generate(model, prompt, context, printPartialResponse);
+        solutionFile.flush();
+        solutionFile.close();
+    }
+
+    ~Assistant() {
+        // solutionFile.close();
+    }
+};
 
 std::string getUsersPathToTestDir() {
-    std::cout<<"type in path to the test directory:\n";
-    std::string pathToTestDir;
-    std::cin>>pathToTestDir;
-    return pathToTestDir;
+    // std::cout<<"type in path to the test directory:\n";
+    // std::string pathToTestDir;
+    // std::cin>>pathToTestDir;
+    // return pathToTestDir;
+    return "tests";
 }
 
 std::string changeExtension(std::string path, int extensionLength, std::string newExtension) {
     return path.substr(0, path.size() - extensionLength) + newExtension;
 }
 
-TestResult testSolution(std::string pathToSolution) {
-    std::string pathToCompiledSolution = changeExtension(pathToSolution, 4, "");
-    const std::string compilationCommand = "g++ " + pathToSolution + " -o " + pathToCompiledSolution;
+CompilationResult compileSolution(std::string pathToSolution, std::string compileErrorsPath, std::string pathToCompiledSolution) {
+    // std::cout << "Compiling solution..." << std::endl;
+    // std::cout << "Path to solution: " << pathToSolution << std::endl;
+    // std::cout << "The solution: " << std::endl;
+    // std::string cat_command = "cat " + pathToSolution;
+    // system(cat_command.c_str());
+    // std::cout << std::endl << std::endl;
+
+    const std::string compilationCommand = "g++ " + pathToSolution + " -o " + pathToCompiledSolution + " 2> " + compileErrorsPath;
+
     int compilationResult = system(compilationCommand.c_str());
     if (compilationResult != 0) {
         return CompilationFailed;
     }
+    return CompilationSuccess;
+}
+
+TestResult testSolution(std::string pathToCompiledSolution, std::string pathToDiffOutput = "diffOutput.txt") {
     std::string pathToTestDir = getUsersPathToTestDir();
     std::set<fs::path> testInputs;
     std::set<fs::path> testOutputs;
@@ -85,7 +120,7 @@ TestResult testSolution(std::string pathToSolution) {
         }
 
         std::string diffCommand = "diff SatoriGPToutput.out " +
-                changeExtension(path.string(), 3, ".out");
+                changeExtension(path.string(), 3, ".out") + " > " + pathToDiffOutput;
         int filesAreDifferent = system(diffCommand.c_str());
         if (filesAreDifferent) {
             std::cout<<"Test "<<path.filename().string()<<"\033[31m"<<" FAILED"<<std::endl;
@@ -103,23 +138,95 @@ TestResult testSolution(std::string pathToSolution) {
 
 }
 
+// remove everything before the first ``` and after the last ``` if there are strays
+void destray(std::string filename) {
+    std::ifstream file(filename);
+    std::string fileContents;
+    std::string line;
+    bool foundFirst = false;
+    while (std::getline(file, line)) {
+        if (line.find("```") != std::string::npos) {
+            if (!foundFirst) {
+                foundFirst = true;
+            } else {
+                break;
+            }
+        }
+        else if (foundFirst) {
+            fileContents += line + '\n';
+        }
+    }
+
+    file.close();
+    std::ofstream newFile(filename);
+    newFile << fileContents;
+    newFile.close();
+}
+
 int main() {
     std::string problemDescription = getUsersProblemDescription();
+
+    std::string onlyCodePrompt = " Write only the c++ code that will compile.";
 
     if (problemDescription.empty()) {
         std::cout<<"Couldn't read problem description!"<<std::endl;
         return 1;
     }
 
-    std::string pathToSolution = mockCreateCorrectSolution(problemDescription);
+    std::string pathToSolution = "solution.cpp";
+    std::string compileErrorsPath = "compileErrors.txt";
+    std::string pathToCompiledSolution = "solution";
+    std::string pathToDiffOutput = "diffOutput.txt";
+    Assistant assistant(pathToSolution, "codellama");
 
-    if (pathToSolution.empty()) {
-        std::cout<<"Couldn't generate solution";
-        return 1;
+    assistant.prompt(problemDescription + onlyCodePrompt);
+    destray(pathToSolution);
+
+    while (true) {
+
+        CompilationResult compilationResult = compileSolution(pathToSolution, compileErrorsPath, pathToCompiledSolution);
+
+        if (compilationResult == CompilationFailed) {
+            std::cout<<"Compilation failed. Prompting compile errors."<<std::endl;
+            std::string compileErrors;
+            std::ifstream file(compileErrorsPath);
+            if (file) {
+                std::string line;
+                while (std::getline(file, line)) {
+                    compileErrors += line + '\n';
+                }
+                file.close();
+            }
+            std::cout << compileErrors << std::endl;
+            assistant.prompt(compileErrors + onlyCodePrompt);
+            destray(pathToSolution);
+        } else {
+            std::cout << "Compilation successful." << std::endl;
+            TestResult testResult = testSolution(pathToCompiledSolution, pathToDiffOutput);
+            std::string diffOutput;
+            std::cout << "Test result: ";
+            if (testResult == Correct) {
+                std::cout << "Correct" << std::endl;
+                return 0;
+            } else if (testResult == Incorrect) {
+                std::cout << "Incorrect" << std::endl;
+                std::ifstream file(pathToDiffOutput);
+                if (file) {
+                    std::string line;
+                    while (std::getline(file, line)) {
+                        diffOutput += line + '\n';
+                    }
+                    file.close();
+                }
+                std::string prompt = "wrong answer." + diffOutput + onlyCodePrompt;
+                std::cout << diffOutput << std::endl;
+                assistant.prompt(prompt);
+                destray(pathToSolution);
+            } else if (testResult == RunFailed) {
+                std::cout << "Run failed" << std::endl;
+                assistant.prompt("Run failed");
+                destray(pathToSolution);
+            }
+        }
     }
-
-    TestResult testResult = testSolution(pathToSolution);
-
-    std::cout<<testResult<<std::endl;
-    return 0;
 }

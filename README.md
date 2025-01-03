@@ -1,6 +1,8 @@
-For now, just a transformers library test.
-
-1. Create a python virtual enviroment
-2. Install the transformers library into the enviroment
-3. You will need to install torch/tensorflow too
-4. Test with [venv path]/bin/python transformers_test.py
+1. install ollama `curl -fsSL https://ollama.com/install.sh | sh` - check the [ollama github](https://github.com/ollama/ollama?tab=readme-ov-file) for more information.
+2. run `ollama run codellama` to start the ollama server
+3. download the ollama-hpp header file from the [ollama-hpp github](https://github.com/jmont-dev/ollama-hpp)
+4.run with 
+```
+g++ main.cpp -I[path to ollama-hpp]/singleheader -o main
+./main
+```
