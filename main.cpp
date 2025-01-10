@@ -163,7 +163,6 @@ TestResult testSolution(std::string pathToCompiledSolution, std::string pathToDi
 
     for (auto path: testInputs) {
         std::string runCommand = "./" + pathToCompiledSolution + " < " + path.string() + " > " + "SatoriGPTOutput.out";
-        std::cout<<runCommand<<std::endl;
         int runResult = system(runCommand.c_str());
         if (runResult != 0) {
             return TestResult(RunFailed);
@@ -229,7 +228,7 @@ int main() {
     std::string pathToCompiledSolution = "solution";
     std::string pathToDiffOutput = "diffOutput.txt";
     std::string pathToSatoriGPTOutput = "SatoriGPTOutput.out";
-    Assistant assistant(pathToSolution, "llama3.2:1b");
+    Assistant assistant(pathToSolution, "codellama");
 
     assistant.prompt(problemDescription + onlyCodePrompt);
     destray(pathToSolution);
