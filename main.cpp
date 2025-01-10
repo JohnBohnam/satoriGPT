@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <cstdlib>
 #include <set>
+#include <optional>
 #include "ollama.hpp"
 
 namespace fs = std::filesystem;
@@ -30,8 +31,56 @@ std::string getUsersProblemDescription() {
     return fileContents;
 }
 
-enum TestResult {
+std::string createDiffPrompt(std::string pathToSatoriGPTOutput, std::string failingTest) {
+	std::string prompt;
+	std::string ifstream;
+	std::string line;
+    std::ifstream outputFile(pathToSatoriGPTOutput);
+    
+    if(outputFile) {
+		prompt += "your answear: ";
+		while (std::getline(outputFile, line)) {
+			prompt += line + '\n';
+		}
+	}
+	else
+		return "";
+	
+    std::ifstream expectedOutputFile("./tests/" + failingTest.substr(0, failingTest.size()-2) + "out");
+    if(expectedOutputFile) {
+		prompt += "expected answear: ";
+		while (std::getline(expectedOutputFile, line)) {
+			prompt += line + '\n';
+		}
+	}
+	else
+		return "";
+	return prompt;
+}
+
+// swaps default prompt to users prompt
+void getUsersPrompt(std::string &prompt) {
+    std::string userInput;
+    std::cout << "Would you like to provide your own prompt? (yes/no): ";
+    std::getline(std::cin, userInput);
+
+    if (userInput == "yes" || userInput == "y") {
+        std::cout << "Please enter your custom prompt: ";
+        std::getline(std::cin, userInput);
+        prompt = userInput;
+    }
+}
+
+enum TestStatus {
     Correct, Incorrect, RunFailed
+};
+
+struct TestResult {
+	TestStatus status;
+	std::optional<std::string> failingTest;
+	
+	TestResult(TestStatus s, std::optional<std::string> test = std::nullopt)
+		: status(s), failingTest(test) {}
 };
 
 enum CompilationResult {
@@ -113,19 +162,21 @@ TestResult testSolution(std::string pathToCompiledSolution, std::string pathToDi
     int testsPassed = 0;
 
     for (auto path: testInputs) {
-        std::string runCommand = "./" + pathToCompiledSolution + " < " + path.string() + " > " + "SatoriGPToutput.out";
+        std::string runCommand = "./" + pathToCompiledSolution + " < " + path.string() + " > " + "SatoriGPTOutput.out";
+        std::cout<<runCommand<<std::endl;
         int runResult = system(runCommand.c_str());
         if (runResult != 0) {
-            return RunFailed;
+            return TestResult(RunFailed);
         }
 
-        std::string diffCommand = "diff SatoriGPToutput.out " +
-                changeExtension(path.string(), 3, ".out") + " > " + pathToDiffOutput;
+        std::string diffCommand = "diff -b SatoriGPTOutput.out " + 					// -b ignores blank spaces in diff
+                changeExtension(path.string(), 3, ".out") + " > " + pathToDiffOutput; 
+        std::cout<<diffCommand<<std::endl;
         int filesAreDifferent = system(diffCommand.c_str());
         if (filesAreDifferent) {
             std::cout<<"Test "<<path.filename().string()<<"\033[31m"<<" FAILED"<<std::endl;
             std::cout<<"\033[0m"; // reset text color
-            return Incorrect;
+            return TestResult(Incorrect, path.filename().string());
         }
 
         std::cout<<"Test "<<path.filename().string()<<"\033[32m"<<" PASSED"<<std::endl;
@@ -134,7 +185,7 @@ TestResult testSolution(std::string pathToCompiledSolution, std::string pathToDi
         testsPassed++;
     }
 
-    return Correct;
+    return TestResult(Correct);
 
 }
 
@@ -177,15 +228,19 @@ int main() {
     std::string compileErrorsPath = "compileErrors.txt";
     std::string pathToCompiledSolution = "solution";
     std::string pathToDiffOutput = "diffOutput.txt";
-    Assistant assistant(pathToSolution, "codellama");
+    std::string pathToSatoriGPTOutput = "SatoriGPTOutput.out";
+    Assistant assistant(pathToSolution, "llama3.2:1b");
 
     assistant.prompt(problemDescription + onlyCodePrompt);
     destray(pathToSolution);
+    int tries = 0;
 
     while (true) {
+		tries++;
 
         CompilationResult compilationResult = compileSolution(pathToSolution, compileErrorsPath, pathToCompiledSolution);
 
+        std::string prompt;
         if (compilationResult == CompilationFailed) {
             std::cout<<"Compilation failed. Prompting compile errors."<<std::endl;
             std::string compileErrors;
@@ -198,35 +253,27 @@ int main() {
                 file.close();
             }
             std::cout << compileErrors << std::endl;
-            assistant.prompt(compileErrors + onlyCodePrompt);
-            destray(pathToSolution);
+            prompt = compileErrors + onlyCodePrompt;
         } else {
             std::cout << "Compilation successful." << std::endl;
             TestResult testResult = testSolution(pathToCompiledSolution, pathToDiffOutput);
-            std::string diffOutput;
             std::cout << "Test result: ";
-            if (testResult == Correct) {
+            if (testResult.status == Correct) {
                 std::cout << "Correct" << std::endl;
                 return 0;
-            } else if (testResult == Incorrect) {
+            } else if (testResult.status == Incorrect) {
                 std::cout << "Incorrect" << std::endl;
-                std::ifstream file(pathToDiffOutput);
-                if (file) {
-                    std::string line;
-                    while (std::getline(file, line)) {
-                        diffOutput += line + '\n';
-                    }
-                    file.close();
-                }
-                std::string prompt = "wrong answer." + diffOutput + onlyCodePrompt;
-                std::cout << diffOutput << std::endl;
-                assistant.prompt(prompt);
-                destray(pathToSolution);
-            } else if (testResult == RunFailed) {
+                
+                prompt = createDiffPrompt(pathToSatoriGPTOutput, testResult.failingTest.value());
+                std::cout<<prompt<<std::endl;
+                prompt = "wrong answer." + prompt + onlyCodePrompt;
+            } else if (testResult.status == RunFailed) {
                 std::cout << "Run failed" << std::endl;
-                assistant.prompt("Run failed");
-                destray(pathToSolution);
+                prompt = "Run failed";
             }
         }
+        if(tries%5 == 0) getUsersPrompt(prompt);
+        assistant.prompt(prompt);
+        destray(pathToSolution);
     }
 }
