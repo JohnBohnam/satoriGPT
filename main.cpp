@@ -1,4 +1,4 @@
-#include <iostream>
+0~#include <iostream>
 #include <fstream>
 #include <string>
 #include <filesystem>
@@ -10,6 +10,8 @@
 namespace fs = std::filesystem;
 
 
+int verbose = 1;
+
 std::string pathToSolution = "solution.cpp";
 std::string compileErrorsPath = "compileErrors.txt";
 std::string pathToCompiledSolution = "solution";
@@ -19,7 +21,6 @@ std::string usedModel = "codellama";
 std::string problemPath = "problem.txt";
 std::string testsDir = "./tests";
 
-
 const std::string bold = "\033[1m";
 const std::string red = "\033[31m";
 const std::string green = "\033[32m";
@@ -27,9 +28,6 @@ const std::string yellow = "\033[33m";
 const std::string blue = "\033[34m";
 const std::string cyan = "\033[36m";
 const std::string reset = "\033[0m";
-
-
-int verbose = 1;
 
 void LOG(std::string message, int lvl = 2) {
     if (lvl <= verbose)
@@ -66,30 +64,30 @@ std::string getUsersProblemDescription() {
 }
 
 std::string createDiffPrompt(std::string pathToSatoriGPTOutput, std::string failingTest) {
-	std::string prompt;
-	std::string ifstream;
-	std::string line;
+    std::string prompt;
+    std::string ifstream;
+    std::string line;
     std::ifstream outputFile(pathToSatoriGPTOutput);
-    
+
     if(outputFile) {
-		prompt += "your answear: ";
-		while (std::getline(outputFile, line)) {
-			prompt += line + '\n';
-		}
-	}
-	else
-		return "";
-	
+        prompt += "your answear: ";
+        while (std::getline(outputFile, line)) {
+            prompt += line + '\n';
+        }
+    }
+    else
+        return "";
+
     std::ifstream expectedOutputFile(getUsersPathToTestDir() + failingTest.substr(0, failingTest.size()-2) + "out");
     if(expectedOutputFile) {
-		prompt += "expected answear: ";
-		while (std::getline(expectedOutputFile, line)) {
-			prompt += line + '\n';
-		}
-	}
-	else
-		return "";
-	return prompt;
+        prompt += "expected answear: ";
+        while (std::getline(expectedOutputFile, line)) {
+            prompt += line + '\n';
+        }
+    }
+    else
+        return "";
+    return prompt;
 }
 
 // swaps default prompt to users prompt
@@ -110,11 +108,11 @@ enum TestStatus {
 };
 
 struct TestResult {
-	TestStatus status;
-	std::optional<std::string> failingTest;
-	
-	TestResult(TestStatus s, std::optional<std::string> test = std::nullopt)
-		: status(s), failingTest(test) {}
+    TestStatus status;
+    std::optional<std::string> failingTest;
+
+    TestResult(TestStatus s, std::optional<std::string> test = std::nullopt)
+            : status(s), failingTest(test) {}
 };
 
 enum CompilationResult {
@@ -150,6 +148,7 @@ public:
 
     void prompt(std::string prompt, bool add_context = true) {
         solutionFile.open(solution_path);
+        reset_context();
         ollama::generate(model, prompt, context, printPartialResponse);
         solutionFile.flush();
         solutionFile.close();
@@ -159,8 +158,6 @@ public:
         // solutionFile.close();
     }
 };
-
-
 
 std::string changeExtension(std::string path, int extensionLength, std::string newExtension) {
     return path.substr(0, path.size() - extensionLength) + newExtension;
@@ -204,7 +201,7 @@ TestResult testSolution(std::string pathToCompiledSolution, std::string pathToDi
         }
 
         std::string diffCommand = "diff -b SatoriGPTOutput.out " +
-                changeExtension(path.string(), 3, ".out") + " > " + pathToDiffOutput; 
+                                  changeExtension(path.string(), 3, ".out") + " > " + pathToDiffOutput;
         LOG(diffCommand + "\n");
         int filesAreDifferent = system(diffCommand.c_str());
         if (filesAreDifferent) {
@@ -251,14 +248,58 @@ void destray(std::string filename) {
     newFile.close();
 }
 
+std::string getStringWithFileContents(std::string path) {
+    std::string solutionString;
+    std::ifstream solutionFile(path);
+    if (solutionFile) {
+        std::string line;
+        while (std::getline(solutionFile, line)) {
+            solutionString += line + '\n';
+        }
+        solutionFile.close();
+    }
+    return solutionString;
+}
+
+std::string createProblemStatementPrompt(std::string problemDescription) {
+    return "Write a solution to the following problem: " + problemDescription +
+            ", write a correct solution to the problem in C++. Output only C++ code, DO NOT output any explanation or comments about the code.";
+}
+
+std::string createCompilationFailedPrompt(std::string problemDescription, std::string compilationLog, std::string failingCode, std::string userInstructions) {
+    return "You tried to solve a problem with the following description: " + problemDescription +
+            ", You wrote this solution: " + failingCode +
+            ", This approach fails during compilation. Here is a log: " + compilationLog +
+            (userInstructions != "" ? (", Here are some tips on how you can better approach this problem: " + userInstructions)  : "") +
+            ", Try to write a correct solution to the problem in C++. Output only C++ code, DO NOT output any explanation or comments about the code.";
+}
+
+std::string createIncorrectResultPrompt(std::string problemDescription, std::string testLog, std::string failingCode, std::string userInstructions) {
+    return "You tried to solve a problem with the following description: " + problemDescription +
+           ", You wrote this solution: " + failingCode +
+           ", This approach doesn't solve some of the test cases. Here is a log: " + testLog +
+           (userInstructions != "" ? (", Here are some tips on how you can better approach this problem: " + userInstructions)  : "") +
+           ", Try to write a correct solution to the problem in C++. Output only C++ code, DO NOT output any explanation or comments about the code.";
+}
+
+std::string createRunFailedPrompt(std::string problemDescription, std::string failingCode, std::string userInstructions) {
+    return "You tried to solve a problem with the following description: " + problemDescription +
+           ", You wrote this solution: " + failingCode +
+           ", This approach failed during the runtime." +
+           (userInstructions != "" ? (", Here are some tips on how you can better approach this problem: " + userInstructions)  : "") +
+           ", Try to write a correct solution to the problem in C++. Output only C++ code, DO NOT output any explanation or comments about the code.";
+}
+
+void bye() {
+    std::cout << bold << cyan << "The solution compiled and passed all tests! You can find it in the file " << red << pathToSolution << reset << std::endl;
+}
 
 void greetings() {
-
     std::cout << bold << cyan << "Welcome to the CodeWriter!" << reset << std::endl;
     std::cout << green << "This program will help you write a C++ program that solves a given problem." << reset << std::endl;
     std::cout << yellow << "The problem description is in the file " << bold << red << problemPath << reset << std::endl;
     std::cout << yellow << "The tests are in the directory " << bold << red << testsDir << reset << std::endl;
-    std::cout << yellow << "Tests follow the format: " << reset 
+    std::cout << yellow << "Tests follow the format: " << reset
               << green << "test1.in, test1.out, test2.in, test2.out, ..." << reset << std::endl;
     std::cout << yellow << "The solution will be written to the file " << bold << red << pathToSolution << reset << std::endl;
     std::cout << yellow << "The compiled solution will be written to the file " << bold << red << pathToCompiledSolution << reset << std::endl;
@@ -266,11 +307,6 @@ void greetings() {
     std::cout << cyan << "This project currently uses Ollama. Model used: " << bold << blue << usedModel << reset << std::endl;
     std::cout << bold << "------------------------------------------------------------" << reset << std::endl;
 }
-
-void bye() {
-    std::cout << bold << cyan << "The solution compiled and passed all tests! You can find it in the file " << red << pathToSolution << reset << std::endl;
-}
-
 
 int main() {
     greetings();
@@ -286,19 +322,21 @@ int main() {
 
     Assistant assistant(pathToSolution, usedModel);
 
-    assistant.prompt(problemDescription + onlyCodePrompt);
+    assistant.prompt(createProblemStatementPrompt(problemDescription));
     destray(pathToSolution);
     int tries = 0;
 
     while (true) {
-		tries++;
+        tries++;
 
         CompilationResult compilationResult = compileSolution(pathToSolution, compileErrorsPath, pathToCompiledSolution);
+        std::string solutionString = getStringWithFileContents(pathToSolution);
+        std::string userPrompt = "";
 
         std::string prompt;
         if (compilationResult == CompilationFailed) {
             LOG("Compilation failed. Prompting compile errors.\n", 1);
-            
+
             std::string compileErrors;
             std::ifstream file(compileErrorsPath);
             if (file) {
@@ -309,7 +347,7 @@ int main() {
                 file.close();
             }
             LOG(compileErrors + "\n");
-            prompt = compileErrors + onlyCodePrompt;
+            prompt = createCompilationFailedPrompt(problemDescription, compileErrors, solutionString, userPrompt);
         } else {
             LOG("Compilation successful.\n Test results:", 1);
             TestResult testResult = testSolution(pathToCompiledSolution, pathToDiffOutput);
@@ -318,16 +356,18 @@ int main() {
                 bye();
                 return 0;
             } else if (testResult.status == Incorrect) {
-                LOG("Incorrect\n", 1);                
-                prompt = createDiffPrompt(pathToSatoriGPTOutput, testResult.failingTest.value());
+                LOG("Incorrect\n", 1);
+                prompt = createIncorrectResultPrompt(problemDescription,
+                                                     createDiffPrompt(pathToSatoriGPTOutput, testResult.failingTest.value()),
+                                                     solutionString, userPrompt);
                 LOG(prompt+"\n");
-                prompt = "wrong answer." + prompt + onlyCodePrompt;
             } else if (testResult.status == RunFailed) {
                 LOG("Run failed\n", 1);
-                prompt = "Run failed";
+                prompt = createRunFailedPrompt(problemDescription, solutionString, userPrompt);
             }
         }
-        if(tries%5 == 0) getUsersPrompt(prompt);
+        userPrompt = "";
+        if(tries%5 == 0) getUsersPrompt(userPrompt);
         assistant.prompt(prompt);
         destray(pathToSolution);
     }
