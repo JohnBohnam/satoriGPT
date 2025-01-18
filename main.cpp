@@ -94,12 +94,15 @@ class Assistant {
     std::ofstream solutionFile;
 
     std::function<void(const ollama::response&)> printPartialResponse = [this](const ollama::response &response ) {
-        std::cout<<response.as_simple_string();
-        fflush(stdout);
+        if (verbose) {
+            std::cout<<response.as_simple_string();
+            fflush(stdout);
+        }
         solutionFile << response.as_simple_string();
     };
 
 public:
+    bool verbose = false;
     std::string solution_path;
 
     Assistant(std::string solution_path = "solution.cpp",
@@ -107,7 +110,11 @@ public:
         // solutionFile.open(solution_path);
     }
 
-    void prompt(std::string prompt) {
+    void reset_context() {
+        context = ollama::response();
+    }
+
+    void prompt(std::string prompt, bool add_context = true) {
         solutionFile.open(solution_path);
         ollama::generate(model, prompt, context, printPartialResponse);
         solutionFile.flush();
