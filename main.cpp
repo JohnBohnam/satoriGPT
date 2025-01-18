@@ -10,7 +10,7 @@
 namespace fs = std::filesystem;
 
 
-int verbose = 1;
+int verbose = 2;
 
 std::string pathToSolution = "solution.cpp";
 std::string compileErrorsPath = "compileErrors.txt";
@@ -69,6 +69,9 @@ std::string createDiffPrompt(std::string pathToSatoriGPTOutput, std::string fail
     std::string line;
     std::ifstream outputFile(pathToSatoriGPTOutput);
 
+    // std::cout << "satoriGPTOutput: " << pathToSatoriGPTOutput << std::endl;
+    // std::cout << "failingTest: " << failingTest << std::endl;
+
     if(outputFile) {
         prompt += "your answear: ";
         while (std::getline(outputFile, line)) {
@@ -78,7 +81,8 @@ std::string createDiffPrompt(std::string pathToSatoriGPTOutput, std::string fail
     else
         return "";
 
-    std::ifstream expectedOutputFile(getUsersPathToTestDir() + failingTest.substr(0, failingTest.size()-2) + "out");
+    std::ifstream expectedOutputFile(getUsersPathToTestDir() + "/" + failingTest.substr(0, failingTest.size()-2) + "out");
+    // std::cout << "expectedOutputFile: " << getUsersPathToTestDir() + failingTest.substr(0, failingTest.size()-2) + "out" << std::endl;
     if(expectedOutputFile) {
         prompt += "expected answear: ";
         while (std::getline(expectedOutputFile, line)) {
@@ -127,14 +131,14 @@ class Assistant {
 
     std::function<void(const ollama::response&)> printPartialResponse = [this](const ollama::response &response ) {
         if (verbose) {
-            std::cout<<response.as_simple_string();
+            LOG(response.as_simple_string());
             fflush(stdout);
         }
         solutionFile << response.as_simple_string();
     };
 
 public:
-    bool verbose = false;
+    int verbose = 2;
     std::string solution_path;
 
     Assistant(std::string solution_path = pathToSolution,
@@ -194,13 +198,13 @@ TestResult testSolution(std::string pathToCompiledSolution, std::string pathToDi
     int testsPassed = 0;
 
     for (auto path: testInputs) {
-        std::string runCommand = "./" + pathToCompiledSolution + " < " + path.string() + " > " + "SatoriGPTOutput.out";
+        std::string runCommand = "./" + pathToCompiledSolution + " < " + path.string() + " > " + pathToSatoriGPTOutput;
         int runResult = system(runCommand.c_str());
         if (runResult != 0) {
             return TestResult(RunFailed);
         }
 
-        std::string diffCommand = "diff -b SatoriGPTOutput.out " +
+        std::string diffCommand = "diff -b " + pathToSatoriGPTOutput + " " +
                                   changeExtension(path.string(), 3, ".out") + " > " + pathToDiffOutput;
         LOG(diffCommand + "\n");
         int filesAreDifferent = system(diffCommand.c_str());
@@ -243,6 +247,9 @@ void destray(std::string filename) {
     }
 
     file.close();
+    if (!foundFirst) {
+        return;
+    }
     std::ofstream newFile(filename);
     newFile << fileContents;
     newFile.close();
