@@ -10,6 +10,16 @@
 namespace fs = std::filesystem;
 
 
+std::string pathToSolution = "solution.cpp";
+std::string compileErrorsPath = "compileErrors.txt";
+std::string pathToCompiledSolution = "solution";
+std::string pathToDiffOutput = "diffOutput.txt";
+std::string pathToSatoriGPTOutput = "SatoriGPTOutput.out";
+std::string usedModel = "codellama";
+std::string problemPath = "problem.txt";
+std::string testsDir = "./tests";
+
+
 int verbose = 1;
 
 void LOG(std::string message, int lvl = 2) {
@@ -17,15 +27,22 @@ void LOG(std::string message, int lvl = 2) {
         std::cout << message;
 }
 
+std::string getUsersPathToTestDir() {
+    // std::cout<<"type in path to the test directory:\n";
+    // std::string pathToTestDir;
+    // std::cin>>pathToTestDir;
+    // return pathToTestDir;
+    return testsDir;
+}
+
 std::string getUsersProblemDescription() {
     // std::cout<<"type in path of the problem description:\n";
     // std::string filePath;
     // std::getline(std::cin, filePath);
-    std::string filePath = "problem.txt";
 
-    std::ifstream file(filePath);
+    std::ifstream file(problemPath);
     if (!file) {
-        std::cerr<<"Error: Could not open file at"<<filePath<<std::endl;
+        std::cerr<<"Error: Could not open file at"<<problemPath<<std::endl;
         return "";
     }
 
@@ -54,7 +71,7 @@ std::string createDiffPrompt(std::string pathToSatoriGPTOutput, std::string fail
 	else
 		return "";
 	
-    std::ifstream expectedOutputFile("./tests/" + failingTest.substr(0, failingTest.size()-2) + "out");
+    std::ifstream expectedOutputFile(getUsersPathToTestDir() + failingTest.substr(0, failingTest.size()-2) + "out");
     if(expectedOutputFile) {
 		prompt += "expected answear: ";
 		while (std::getline(expectedOutputFile, line)) {
@@ -113,8 +130,8 @@ public:
     bool verbose = false;
     std::string solution_path;
 
-    Assistant(std::string solution_path = "solution.cpp",
-              std::string model = "codellama") : solution_path(solution_path), model(model) {
+    Assistant(std::string solution_path = pathToSolution,
+              std::string model = usedModel) : solution_path(solution_path), model(model) {
         // solutionFile.open(solution_path);
     }
 
@@ -134,13 +151,7 @@ public:
     }
 };
 
-std::string getUsersPathToTestDir() {
-    // std::cout<<"type in path to the test directory:\n";
-    // std::string pathToTestDir;
-    // std::cin>>pathToTestDir;
-    // return pathToTestDir;
-    return "tests";
-}
+
 
 std::string changeExtension(std::string path, int extensionLength, std::string newExtension) {
     return path.substr(0, path.size() - extensionLength) + newExtension;
@@ -232,7 +243,32 @@ void destray(std::string filename) {
 }
 
 
+void greetings() {
+    const std::string bold = "\033[1m";
+    const std::string red = "\033[31m";
+    const std::string green = "\033[32m";
+    const std::string yellow = "\033[33m";
+    const std::string blue = "\033[34m";
+    const std::string cyan = "\033[36m";
+    const std::string reset = "\033[0m";
+
+    std::cout << bold << cyan << "Welcome to the CodeWriter!" << reset << std::endl;
+    std::cout << green << "This program will help you write a C++ program that solves a given problem." << reset << std::endl;
+    std::cout << yellow << "The problem description is in the file " << bold << red << problemPath << reset << std::endl;
+    std::cout << yellow << "The tests are in the directory " << bold << red << testsDir << reset << std::endl;
+    std::cout << yellow << "Tests follow the format: " << reset 
+              << green << "test1.in, test1.out, test2.in, test2.out, ..." << reset << std::endl;
+    std::cout << yellow << "The solution will be written to the file " << bold << red << pathToSolution << reset << std::endl;
+    std::cout << yellow << "The compiled solution will be written to the file " << bold << red << pathToCompiledSolution << reset << std::endl;
+    std::cout << std::endl;
+    std::cout << cyan << "This project currently uses Ollama. Model used: " << bold << blue << usedModel << reset << std::endl;
+    std::cout << bold << "------------------------------------------------------------" << reset << std::endl;
+}
+
+
 int main() {
+    greetings();
+
     std::string problemDescription = getUsersProblemDescription();
 
     std::string onlyCodePrompt = " Write only the c++ code that will compile.";
@@ -242,12 +278,7 @@ int main() {
         return 1;
     }
 
-    std::string pathToSolution = "solution.cpp";
-    std::string compileErrorsPath = "compileErrors.txt";
-    std::string pathToCompiledSolution = "solution";
-    std::string pathToDiffOutput = "diffOutput.txt";
-    std::string pathToSatoriGPTOutput = "SatoriGPTOutput.out";
-    Assistant assistant(pathToSolution, "codellama");
+    Assistant assistant(pathToSolution, usedModel);
 
     assistant.prompt(problemDescription + onlyCodePrompt);
     destray(pathToSolution);
