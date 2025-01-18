@@ -20,6 +20,15 @@ std::string problemPath = "problem.txt";
 std::string testsDir = "./tests";
 
 
+const std::string bold = "\033[1m";
+const std::string red = "\033[31m";
+const std::string green = "\033[32m";
+const std::string yellow = "\033[33m";
+const std::string blue = "\033[34m";
+const std::string cyan = "\033[36m";
+const std::string reset = "\033[0m";
+
+
 int verbose = 1;
 
 void LOG(std::string message, int lvl = 2) {
@@ -244,13 +253,6 @@ void destray(std::string filename) {
 
 
 void greetings() {
-    const std::string bold = "\033[1m";
-    const std::string red = "\033[31m";
-    const std::string green = "\033[32m";
-    const std::string yellow = "\033[33m";
-    const std::string blue = "\033[34m";
-    const std::string cyan = "\033[36m";
-    const std::string reset = "\033[0m";
 
     std::cout << bold << cyan << "Welcome to the CodeWriter!" << reset << std::endl;
     std::cout << green << "This program will help you write a C++ program that solves a given problem." << reset << std::endl;
@@ -263,6 +265,10 @@ void greetings() {
     std::cout << std::endl;
     std::cout << cyan << "This project currently uses Ollama. Model used: " << bold << blue << usedModel << reset << std::endl;
     std::cout << bold << "------------------------------------------------------------" << reset << std::endl;
+}
+
+void bye() {
+    std::cout << bold << cyan << "The solution compiled and passed all tests! You can find it in the file " << red << pathToSolution << reset << std::endl;
 }
 
 
@@ -309,6 +315,7 @@ int main() {
             TestResult testResult = testSolution(pathToCompiledSolution, pathToDiffOutput);
             if (testResult.status == Correct) {
                 LOG("Correct\n", 1);
+                bye();
                 return 0;
             } else if (testResult.status == Incorrect) {
                 LOG("Incorrect\n", 1);                
