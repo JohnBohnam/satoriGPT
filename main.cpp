@@ -9,6 +9,14 @@
 
 namespace fs = std::filesystem;
 
+
+int verbose = 1;
+
+void LOG(std::string message, int lvl = 2) {
+    if (lvl <= verbose)
+        std::cout << message;
+}
+
 std::string getUsersProblemDescription() {
     // std::cout<<"type in path of the problem description:\n";
     // std::string filePath;
@@ -160,7 +168,7 @@ TestResult testSolution(std::string pathToCompiledSolution, std::string pathToDi
     std::set<fs::path> testInputs;
     std::set<fs::path> testOutputs;
     for (const auto &entry: fs::directory_iterator(pathToTestDir)) {
-        std::cout<< entry.path() << " " << entry.path().extension().string() << " "<< entry.path().filename().string()<<std::endl;
+        LOG(entry.path().string() + " " + entry.path().extension().string() + " " + entry.path().filename().string() + "\n");
         if (entry.path().extension().string() == ".in") {
             testInputs.insert(entry.path());
         }
@@ -175,18 +183,21 @@ TestResult testSolution(std::string pathToCompiledSolution, std::string pathToDi
             return TestResult(RunFailed);
         }
 
-        std::string diffCommand = "diff -b SatoriGPTOutput.out " + 					// -b ignores blank spaces in diff
+        std::string diffCommand = "diff -b SatoriGPTOutput.out " +
                 changeExtension(path.string(), 3, ".out") + " > " + pathToDiffOutput; 
-        std::cout<<diffCommand<<std::endl;
+        LOG(diffCommand + "\n");
         int filesAreDifferent = system(diffCommand.c_str());
         if (filesAreDifferent) {
-            std::cout<<"Test "<<path.filename().string()<<"\033[31m"<<" FAILED"<<std::endl;
-            std::cout<<"\033[0m"; // reset text color
+            LOG("Test " + path.filename().string() + "\033[31m failed\n \033[0m");
+            // std::cout<<"Test "<<path.filename().string()<<"\033[31m"<<" FAILED"<<std::endl;
+            // std::cout<<"\033[0m";
             return TestResult(Incorrect, path.filename().string());
         }
 
-        std::cout<<"Test "<<path.filename().string()<<"\033[32m"<<" PASSED"<<std::endl;
-        std::cout<<"\033[0m"; // reset text color
+        LOG("Test " + path.filename().string() + "\033[32m PASSED\n \033[0m");
+
+        // std::cout<<"Test "<<path.filename().string()<<"\033[32m"<<" PASSED"<<std::endl;
+        // std::cout<<"\033[0m"; // reset text color
 
         testsPassed++;
     }
@@ -220,6 +231,7 @@ void destray(std::string filename) {
     newFile.close();
 }
 
+
 int main() {
     std::string problemDescription = getUsersProblemDescription();
 
@@ -248,7 +260,8 @@ int main() {
 
         std::string prompt;
         if (compilationResult == CompilationFailed) {
-            std::cout<<"Compilation failed. Prompting compile errors."<<std::endl;
+            LOG("Compilation failed. Prompting compile errors.\n", 1);
+            
             std::string compileErrors;
             std::ifstream file(compileErrorsPath);
             if (file) {
@@ -258,23 +271,21 @@ int main() {
                 }
                 file.close();
             }
-            std::cout << compileErrors << std::endl;
+            LOG(compileErrors + "\n");
             prompt = compileErrors + onlyCodePrompt;
         } else {
-            std::cout << "Compilation successful." << std::endl;
+            LOG("Compilation successful.\n Test results:", 1);
             TestResult testResult = testSolution(pathToCompiledSolution, pathToDiffOutput);
-            std::cout << "Test result: ";
             if (testResult.status == Correct) {
-                std::cout << "Correct" << std::endl;
+                LOG("Correct\n", 1);
                 return 0;
             } else if (testResult.status == Incorrect) {
-                std::cout << "Incorrect" << std::endl;
-                
+                LOG("Incorrect\n", 1);                
                 prompt = createDiffPrompt(pathToSatoriGPTOutput, testResult.failingTest.value());
-                std::cout<<prompt<<std::endl;
+                LOG(prompt+"\n");
                 prompt = "wrong answer." + prompt + onlyCodePrompt;
             } else if (testResult.status == RunFailed) {
-                std::cout << "Run failed" << std::endl;
+                LOG("Run failed\n", 1);
                 prompt = "Run failed";
             }
         }
